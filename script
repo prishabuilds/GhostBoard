@@ -1,0 +1,1 @@
+find /home/claude/GhostBoard -type f | sort
