@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GhostBoard — Self-Healing Embedded System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #050a0f;
+    --bg2:       #080f18;
+    --panel:     #0a1520;
+    --border:    #0d2535;
+    --cyan:      #00e5ff;
+    --cyan-dim:  #007a8a;
+    --green:     #00ff88;
+    --green-dim: #00552e;
+    --red:       #ff2d55;
+    --yellow:    #ffd600;
+    --text:      #a8ccd8;
+    --text-dim:  #3d5a6a;
+    --mono:      'Share Tech Mono', monospace;
+    --display:   'Orbitron', sans-serif;
+    --body:      'Rajdhani', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Scan-line overlay ─────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,255,0.015) 2px,
+      rgba(0,229,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Noise grain ───────────────────────────────────────────── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9998;
+    opacity: 0.3;
+  }
+
+  /* ── Glow utilities ────────────────────────────────────────── */
+  .glow-cyan  { text-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(0,229,255,0.4); }
+  .glow-green { text-shadow: 0 0 8px var(--green), 0 0 20px rgba(0,255,136,0.4); }
+  .glow-red   { text-shadow: 0 0 8px var(--red); }
+
+  /* ── HEADER ────────────────────────────────────────────────── */
+  header {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    overflow: hidden;
+  }
+
+  .header-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridPulse 8s ease-in-out infinite;
+  }
+
+  @keyframes gridPulse {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 1; }
+  }
+
+  .header-vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 30%, var(--bg) 80%);
+  }
+
+  .header-content { position: relative; z-index: 2; }
+
+  .boot-line {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--green);
+    letter-spacing: 0.15em;
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fadeIn 0.5s 0.3s forwards;
+  }
+
+  .boot-line span { color: var(--text-dim); }
+
+  .logo {
+    font-family: var(--display);
+    font-size: clamp(3rem, 10vw, 7rem);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: var(--cyan);
+    line-height: 1;
+    opacity: 0;
+    animation: fadeSlideUp 0.8s 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
+  }
+
+  .logo-ghost {
+    display: inline-block;
+    color: transparent;
+    -webkit-text-stroke: 2px var(--cyan);
+    filter: drop-shadow(0 0 12px var(--cyan));
+  }
+
+  .logo-board { color: var(--cyan); }
+
+  .tagline {
+    font-family: var(--body);
+    font-size: clamp(0.9rem, 2.5vw, 1.2rem);
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--text);
+    margin-top: 1rem;
+    opacity: 0;
+    animation: fadeIn 0.8s 1.1s forwards;
+  }
+
+  .badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 2rem;
+    opacity: 0;
+    animation: fadeIn 0.8s 1.4s forwards;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .badge-cyan   { border-color: var(--cyan);   color: var(--cyan);   background: rgba(0,229,255,0.07); }
+  .badge-green  { border-color: var(--green);  color: var(--green);  background: rgba(0,255,136,0.07); }
+  .badge-yellow { border-color: var(--yellow); color: var(--yellow); background: rgba(255,214,0,0.07); }
+
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    opacity: 0;
+    animation: fadeIn 0.8s 1.7s forwards;
+  }
+
+  .btn {
+    font-family: var(--display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.8rem 2rem;
+    text-decoration: none;
+    border: 1px solid;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .btn-primary {
+    background: var(--cyan);
+    color: var(--bg);
+    border-color: var(--cyan);
+    box-shadow: 0 0 20px rgba(0,229,255,0.3);
+  }
+  .btn-primary:hover {
+    background: transparent;
+    color: var(--cyan);
+    box-shadow: 0 0 30px rgba(0,229,255,0.5);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  /* ── SECTION BASE ──────────────────────────────────────────── */
+  section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 5rem 2rem;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.3em;
+    color: var(--cyan-dim);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  .section-title {
+    font-family: var(--display);
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.05em;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title span { color: var(--cyan); }
+
+  /* ── FULL-WIDTH DIVIDER ────────────────────────────────────── */
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-dim), transparent);
+    margin: 0;
+  }
+
+  /* ── OVERVIEW FEATURES ─────────────────────────────────────── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .feature-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--cyan);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s;
+  }
+  .feature-card:hover { border-color: var(--cyan-dim); transform: translateY(-2px); }
+  .feature-card:hover::before { transform: scaleX(1); }
+
+  .feature-icon {
+    font-size: 1.8rem;
+    margin-bottom: 0.8rem;
+    display: block;
+  }
+
+  .feature-title {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--cyan);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .feature-desc {
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── ARCHITECTURE ──────────────────────────────────────────── */
+  .arch-diagram {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.9;
+    color: var(--text);
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .arch-diagram .c { color: var(--cyan); }
+  .arch-diagram .g { color: var(--green); }
+  .arch-diagram .y { color: var(--yellow); }
+  .arch-diagram .d { color: var(--text-dim); }
+
+  /* ── TASKS ─────────────────────────────────────────────────── */
+  .tasks-list { display: flex; flex-direction: column; gap: 1rem; }
+
+  .task-row {
+    display: grid;
+    grid-template-columns: 220px 80px 1fr;
+    gap: 1rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 1.2rem 1.5rem;
+    align-items: start;
+    transition: border-color 0.2s;
+  }
+  .task-row:hover { border-color: var(--cyan-dim); }
+
+  .task-name {
+    font-family: var(--display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 0.05em;
+  }
+  .task-meta {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 0.3rem;
+  }
+
+  .task-prio {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-align: center;
+    padding: 0.2rem 0;
+  }
+  .prio-high   { color: var(--red);    border: 1px solid var(--red);    padding: 0.2rem 0.5rem; font-size: 0.65rem; }
+  .prio-med    { color: var(--yellow); border: 1px solid var(--yellow); padding: 0.2rem 0.5rem; font-size: 0.65rem; }
+  .prio-low    { color: var(--green);  border: 1px solid var(--green);  padding: 0.2rem 0.5rem; font-size: 0.65rem; }
+
+  .task-desc { font-size: 0.9rem; color: var(--text); line-height: 1.6; }
+
+  /* ── STATE MACHINE ─────────────────────────────────────────── */
+  .states-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .state-card {
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    text-align: center;
+    position: relative;
+  }
+
+  .state-indicator {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    margin: 0 auto 1rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+  }
+  .si-healthy   { background: rgba(0,255,136,0.15); border: 2px solid var(--green); box-shadow: 0 0 16px rgba(0,255,136,0.3); }
+  .si-nervous   { background: rgba(255,214,0,0.1);  border: 2px solid var(--yellow); animation: blink 1.5s infinite; }
+  .si-critical  { background: rgba(255,45,85,0.15); border: 2px solid var(--red);   animation: blink 0.5s infinite; }
+  .si-recovering{ background: rgba(0,229,255,0.1);  border: 2px solid var(--cyan);  animation: spin 3s linear infinite; }
+
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes spin  { to { transform: rotate(360deg); } }
+
+  .state-name {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+  .sn-healthy   { color: var(--green); }
+  .sn-nervous   { color: var(--yellow); }
+  .sn-critical  { color: var(--red); }
+  .sn-recovering{ color: var(--cyan); }
+
+  .state-desc { font-size: 0.85rem; color: var(--text-dim); }
+
+  /* ── FAULT SIMULATION ──────────────────────────────────────── */
+  .fault-table { width: 100%; border-collapse: collapse; }
+  .fault-table th {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: var(--cyan-dim);
+    text-transform: uppercase;
+    text-align: left;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .fault-table td {
+    padding: 0.9rem 1rem;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .fault-table tr:last-child td { border-bottom: none; }
+  .fault-table tr:hover td { background: var(--panel); }
+
+  .cmd {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--green);
+    background: var(--bg2);
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--green-dim);
+  }
+
+  /* ── RECOVERY FLOW ─────────────────────────────────────────── */
+  .recovery-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-width: 520px;
+  }
+
+  .flow-step {
+    display: flex;
+    gap: 1.2rem;
+    align-items: flex-start;
+  }
+
+  .flow-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .flow-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--cyan);
+    background: var(--bg);
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .flow-dot.red    { border-color: var(--red); }
+  .flow-dot.yellow { border-color: var(--yellow); }
+  .flow-dot.green  { border-color: var(--green); }
+
+  .flow-line {
+    width: 2px;
+    flex-grow: 1;
+    min-height: 32px;
+    background: linear-gradient(var(--cyan), var(--border));
+    margin: 4px 0;
+  }
+
+  .flow-content { padding-bottom: 2rem; }
+
+  .flow-title {
+    font-family: var(--display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fff;
+    margin-bottom: 0.3rem;
+  }
+
+  .flow-body { font-size: 0.88rem; color: var(--text-dim); }
+
+  /* ── PIN TABLE ─────────────────────────────────────────────── */
+  .pin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .pin-group-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    color: var(--cyan-dim);
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+  }
+
+  .pin-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+  }
+  .pin-num {
+    font-family: var(--mono);
+    color: var(--yellow);
+    font-size: 0.8rem;
+    min-width: 70px;
+  }
+  .pin-component { color: var(--text); }
+  .pin-note { font-size: 0.75rem; color: var(--text-dim); }
+
+  /* ── FILE STRUCTURE ────────────────────────────────────────── */
+  .file-tree {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 2;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+  }
+  .file-tree .dir  { color: var(--cyan); }
+  .file-tree .file { color: var(--text); }
+  .file-tree .note { color: var(--text-dim); }
+  .file-tree .key  { color: var(--green); }
+
+  /* ── FUTURE TABLE ──────────────────────────────────────────── */
+  .future-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+
+  .future-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 1.3rem;
+    transition: border-color 0.2s;
+  }
+  .future-card:hover { border-color: var(--cyan-dim); }
+
+  .future-phase {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--cyan-dim);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+
+  .future-title {
+    font-family: var(--display);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+
+  .future-desc { font-size: 0.85rem; color: var(--text-dim); }
+
+  /* ── FOOTER ────────────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.5rem;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+  footer span { color: var(--cyan); }
+
+  /* ── NAV ───────────────────────────────────────────────────── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: rgba(5,10,15,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    padding: 0.8rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-logo {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: var(--cyan);
+    letter-spacing: 0.15em;
+    text-decoration: none;
+  }
+
+  .nav-links { display: flex; gap: 1.5rem; }
+  .nav-links a {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--cyan); }
+
+  /* ── ANIMATIONS ────────────────────────────────────────────── */
+  @keyframes fadeIn      { to { opacity: 1; } }
+  @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+  /* scroll reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  @media (max-width: 640px) {
+    .task-row { grid-template-columns: 1fr; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────── -->
+<nav>
+  <a class="nav-logo" href="#">👻 GHOSTBOARD</a>
+  <div class="nav-links">
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#tasks">Tasks</a>
+    <a href="#states">States</a>
+    <a href="#hardware">Hardware</a>
+    <a href="#setup">Setup</a>
+  </div>
+</nav>
+
+<!-- ── HERO ─────────────────────────────────────────────────── -->
+<header>
+  <div class="header-grid"></div>
+  <div class="header-vignette"></div>
+  <div class="header-content">
+    <div class="boot-line">
+      <span>[ SYS ] </span>INITIALIZING GHOSTBOARD OS&nbsp;&nbsp;
+      <span>CORE 0 ONLINE &nbsp;CORE 1 ONLINE</span>
+    </div>
+    <div class="logo">
+      <span class="logo-ghost">GHOST</span><span class="logo-board">BOARD</span>
+    </div>
+    <div class="tagline">AI-Assisted Self-Healing Embedded System</div>
+    <div class="badge-row">
+      <span class="badge badge-cyan">ESP32</span>
+      <span class="badge badge-green">FreeRTOS</span>
+      <span class="badge badge-cyan">C / C++</span>
+      <span class="badge badge-yellow">PlatformIO</span>
+      <span class="badge badge-green">Self-Healing</span>
+      <span class="badge badge-cyan">MIT License</span>
+    </div>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="https://github.com/YOUR_USERNAME/GhostBoard" target="_blank">View on GitHub</a>
+      <a class="btn btn-secondary" href="#overview">Explore Docs ↓</a>
+    </div>
+  </div>
+</header>
+
+<div class="divider"></div>
+
+<!-- ── OVERVIEW ──────────────────────────────────────────────── -->
+<section id="overview">
+  <div class="reveal">
+    <div class="section-label">// 01 — overview</div>
+    <div class="section-title">What is <span>GhostBoard</span>?</div>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <span class="feature-icon">🫀</span>
+      <div class="feature-title">Heartbeat Monitoring</div>
+      <div class="feature-desc">Every RTOS task reports liveness every second. The Health Monitor detects silence within 3 seconds and triggers recovery automatically.</div>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">🔍</span>
+      <div class="feature-title">Anomaly Detection</div>
+      <div class="feature-desc">Sensor readings are validated in real-time against configurable bounds. Out-of-range values and corrupted packets are flagged immediately.</div>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">🛠️</span>
+      <div class="feature-title">Autonomous Recovery</div>
+      <div class="feature-desc">Failed tasks are restarted without rebooting the device. Escalating retry logic handles repeat failures gracefully.</div>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">📟</span>
+      <div class="feature-title">Cyberpunk OLED Dashboard</div>
+      <div class="feature-desc">128×64 SSD1306 display shows live system state, temperature, task count, fault counter, and memory usage bar with animated state transitions.</div>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">📝</span>
+      <div class="feature-title">Persistent Logging</div>
+      <div class="feature-desc">Timestamped structured logs written to Serial and SD card. Format: <code>[TIME] [MODULE] [SEVERITY] MESSAGE</code></div>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">💀</span>
+      <div class="feature-title">Fault Injection</div>
+      <div class="feature-desc">Simulate real hardware/software failures at runtime via Serial commands. Freeze tasks, corrupt data, stall communications — and watch GhostBoard recover.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── ARCHITECTURE ───────────────────────────────────────────── -->
+<section id="architecture">
+  <div class="reveal">
+    <div class="section-label">// 02 — architecture</div>
+    <div class="section-title">System <span>Architecture</span></div>
+  </div>
+  <div class="arch-diagram reveal">
+<span class="d">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="d">│</span>                        <span class="c">ESP32 (Dual Core)</span>                         <span class="d">│</span>
+<span class="d">│</span>                                                             <span class="d">│</span>
+<span class="d">│  </span><span class="y">CORE 0 — Critical Tier</span>          <span class="g">CORE 1 — Application Tier</span>  <span class="d">│</span>
+<span class="d">│  ┌──────────────────────┐        ┌───────────────────────┐  │</span>
+<span class="d">│  │</span>  <span class="c">Health Monitor</span>       <span class="d">│◄──────►│</span>  <span class="g">Sensor Task</span>           <span class="d">│  │</span>
+<span class="d">│  │</span>  heartbeat polling   <span class="d">│        │</span>  ADC read, queue      <span class="d">│  │</span>
+<span class="d">│  │</span>  anomaly detection   <span class="d">│        ├───────────────────────┤  │</span>
+<span class="d">│  │</span>  state machine       <span class="d">│        │</span>  <span class="g">Comm Task</span>             <span class="d">│  │</span>
+<span class="d">│  ├──────────────────────┤        │</span>  UART/WiFi/MQTT sim   <span class="d">│  │</span>
+<span class="d">│  │</span>  <span class="c">Recovery Manager</span>    <span class="d">│        ├───────────────────────┤  │</span>
+<span class="d">│  │</span>  task restart        <span class="d">│        │</span>  <span class="g">Logging Task</span>          <span class="d">│  │</span>
+<span class="d">│  │</span>  module reinit       <span class="d">│        │</span>  Serial + SD card     <span class="d">│  │</span>
+<span class="d">│  │</span>  soft reboot         <span class="d">│        ├───────────────────────┤  │</span>
+<span class="d">│  └──────────────────────┘        │</span>  <span class="g">OLED UI Task</span>          <span class="d">│  │</span>
+<span class="d">│                                  │</span>  SSD1306 dashboard    <span class="d">│  │</span>
+<span class="d">│                                  └───────────────────────┘  │</span>
+<span class="d">│                                                             │</span>
+<span class="d">│  </span><span class="y">Shared:</span>  <span class="c">Queues</span> <span class="d">│</span> <span class="c">Semaphores</span> <span class="d">│</span> <span class="c">Mutexes</span> <span class="d">│</span> <span class="c">Event Groups</span>       <span class="d">│</span>
+<span class="d">└─────────────────────────────────────────────────────────────┘</span>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── TASKS ──────────────────────────────────────────────────── -->
+<section id="tasks">
+  <div class="reveal">
+    <div class="section-label">// 03 — tasks</div>
+    <div class="section-title">RTOS <span>Task Descriptions</span></div>
+  </div>
+  <div class="tasks-list">
+    <div class="task-row reveal">
+      <div>
+        <div class="task-name">Health Monitor</div>
+        <div class="task-meta">Core 0 &nbsp;|&nbsp; 500ms cycle</div>
+      </div>
+      <div><span class="prio-high">PRIO 8</span></div>
+      <div class="task-desc">Central nervous system. Polls heartbeat timestamps, validates sensor data bounds, checks stack watermarks, issues recovery commands, and feeds the hardware watchdog.</div>
+    </div>
+    <div class="task-row reveal">
+      <div>
+        <div class="task-name">Recovery Manager</div>
+        <div class="task-meta">Core 0 &nbsp;|&nbsp; event-driven</div>
+      </div>
+      <div><span class="prio-high">PRIO 7</span></div>
+      <div class="task-desc">Blocks on fault semaphore. On wake: drains recovery queue, restarts tasks (attempt 1), reinitializes modules (attempt 2), or triggers soft reboot (attempt 3).</div>
+    </div>
+    <div class="task-row reveal">
+      <div>
+        <div class="task-name">Sensor Task</div>
+        <div class="task-meta">Core 1 &nbsp;|&nbsp; 1s cycle</div>
+      </div>
+      <div><span class="prio-med">PRIO 5</span></div>
+      <div class="task-desc">Reads NTC thermistor via 12-bit ADC. Converts raw values to °C using Steinhart-Hart equation. Pushes SensorData_t packets to queue. Reports heartbeat every cycle.</div>
+    </div>
+    <div class="task-row reveal">
+      <div>
+        <div class="task-name">Comm Task</div>
+        <div class="task-meta">Core 1 &nbsp;|&nbsp; 2s cycle</div>
+      </div>
+      <div><span class="prio-med">PRIO 4</span></div>
+      <div class="task-desc">Simulates UART/WiFi/MQTT telemetry. Serializes sensor data to JSON. Implements 3-attempt retry with 500ms delay. Simulates 5% random packet loss.</div>
+    </div>
+    <div class="task-row reveal">
+      <div>
+        <div class="task-name">Logging Task</div>
+        <div class="task-meta">Core 1 &nbsp;|&nbsp; continuous</div>
+      </div>
+      <div><span class="prio-low">PRIO 3</span></div>
+      <div class="task-desc">Drains log queue continuously. Writes timestamped entries to Serial (always) and SD card (if mounted). Flushes SD every 10 entries.</div>
+    </div>
+    <div class="task-row reveal">
+      <div>
+        <div class="task-name">OLED UI Task</div>
+        <div class="task-meta">Core 1 &nbsp;|&nbsp; 250ms cycle</div>
+      </div>
+      <div><span class="prio-low">PRIO 2</span></div>
+      <div class="task-desc">Drives 128×64 SSD1306 over I2C. Displays system state, temperature, fault count, memory bar. Animates: blink (NERVOUS), invert flash (CRITICAL), scrolling dots (RECOVERING).</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── STATES ─────────────────────────────────────────────────── -->
+<section id="states">
+  <div class="reveal">
+    <div class="section-label">// 04 — state machine</div>
+    <div class="section-title">System <span>States</span></div>
+  </div>
+  <div class="states-grid">
+    <div class="state-card reveal">
+      <div class="state-indicator si-healthy">✓</div>
+      <div class="state-name sn-healthy glow-green">HEALTHY</div>
+      <div class="state-desc">All tasks reporting heartbeat. Sensor data within bounds. Green LED on. Normal operation.</div>
+    </div>
+    <div class="state-card reveal">
+      <div class="state-indicator si-nervous">!</div>
+      <div class="state-name sn-nervous">NERVOUS</div>
+      <div class="state-desc">First heartbeat miss detected. Yellow LED blinking. Recovery attempt 1 queued.</div>
+    </div>
+    <div class="state-card reveal">
+      <div class="state-indicator si-critical">✕</div>
+      <div class="state-name sn-critical glow-red">CRITICAL</div>
+      <div class="state-desc">Escalation threshold reached. Red LED on. Buzzer beeps. Recovery attempt 2 or 3 in progress.</div>
+    </div>
+    <div class="state-card reveal">
+      <div class="state-indicator si-recovering">↻</div>
+      <div class="state-name sn-recovering">RECOVERING</div>
+      <div class="state-desc">Recovery command issued. Yellow LED on. OLED shows scrolling dots. Awaiting heartbeat restoration.</div>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <div class="section-label" style="margin-bottom:1.5rem;">// fault injection — serial commands</div>
+    <table class="fault-table">
+      <thead>
+        <tr>
+          <th>Command</th>
+          <th>Fault Injected</th>
+          <th>GhostBoard Response</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cmd">F1</span></td>
+          <td>SensorTask frozen</td>
+          <td>Heartbeat stops → detected after 3s → task restarted → HEALTHY restored</td>
+        </tr>
+        <tr>
+          <td><span class="cmd">F2</span></td>
+          <td>Corrupt sensor data</td>
+          <td>Invalid packets queued → HealthMonitor raises WARNING log entries</td>
+        </tr>
+        <tr>
+          <td><span class="cmd">F3</span></td>
+          <td>CommTask stalled</td>
+          <td>Comm heartbeat stops → recovery restarts communication module</td>
+        </tr>
+        <tr>
+          <td><span class="cmd">F0</span></td>
+          <td>Clear all faults</td>
+          <td>All fault flags reset → system returns to HEALTHY state</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── HARDWARE ───────────────────────────────────────────────── -->
+<section id="hardware">
+  <div class="reveal">
+    <div class="section-label">// 05 — hardware</div>
+    <div class="section-title">Pin <span>Connections</span></div>
+  </div>
+  <div class="pin-grid reveal">
+    <div>
+      <div class="pin-group-title">// Status Indicators</div>
+      <div class="pin-row"><span class="pin-num">GPIO 2</span><span class="pin-component">Green LED</span><span class="pin-note">220Ω resistor</span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 4</span><span class="pin-component">Yellow LED</span><span class="pin-note">220Ω resistor</span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 5</span><span class="pin-component">Red LED</span><span class="pin-note">220Ω resistor</span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 18</span><span class="pin-component">Active Buzzer</span><span class="pin-note">+ pin</span></div>
+      <br>
+      <div class="pin-group-title">// Sensor</div>
+      <div class="pin-row"><span class="pin-num">GPIO 34</span><span class="pin-component">NTC Thermistor</span><span class="pin-note">voltage divider midpoint</span></div>
+    </div>
+    <div>
+      <div class="pin-group-title">// OLED Display (I2C)</div>
+      <div class="pin-row"><span class="pin-num">GPIO 21</span><span class="pin-component">SDA</span><span class="pin-note">SSD1306</span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 22</span><span class="pin-component">SCL</span><span class="pin-note">SSD1306</span></div>
+      <br>
+      <div class="pin-group-title">// SD Card (SPI)</div>
+      <div class="pin-row"><span class="pin-num">GPIO 15</span><span class="pin-component">CS</span><span class="pin-note">chip select</span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 23</span><span class="pin-component">MOSI</span><span class="pin-note"></span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 19</span><span class="pin-component">MISO</span><span class="pin-note"></span></div>
+      <div class="pin-row"><span class="pin-num">GPIO 14</span><span class="pin-component">SCK</span><span class="pin-note"></span></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── SETUP ──────────────────────────────────────────────────── -->
+<section id="setup">
+  <div class="reveal">
+    <div class="section-label">// 06 — build & flash</div>
+    <div class="section-title">Getting <span>Started</span></div>
+  </div>
+  <div class="arch-diagram reveal" style="margin-bottom:2rem;">
+<span class="d"># 1. Clone the repository</span>
+<span class="g">git clone</span> https://github.com/YOUR_USERNAME/GhostBoard.git
+<span class="g">cd</span> GhostBoard
+
+<span class="d"># 2. Build firmware</span>
+<span class="g">pio run</span>
+
+<span class="d"># 3. Flash to ESP32</span>
+<span class="g">pio run</span> --target upload
+
+<span class="d"># 4. Open Serial monitor (115200 baud)</span>
+<span class="g">pio device monitor</span> --baud 115200
+  </div>
+
+  <div class="reveal">
+    <div class="section-label" style="margin-bottom:1rem;">// file structure</div>
+    <div class="file-tree">
+<span class="dir">GhostBoard/</span>
+<span class="d">├── </span><span class="dir">firmware/</span>
+<span class="d">│   ├── </span><span class="key">main.cpp</span>                  <span class="note">← Boot sequence, task creation</span>
+<span class="d">│   └── </span><span class="dir">config/</span>
+<span class="d">│       ├── </span><span class="key">system_config.h</span>           <span class="note">← All types, constants, externs</span>
+<span class="d">│       ├── </span><span class="file">fault_inject.h</span>
+<span class="d">│       └── </span><span class="file">fault_inject.cpp</span>
+<span class="d">├── </span><span class="dir">monitoring/</span>
+<span class="d">│   ├── </span><span class="key">health_monitor.cpp</span>            <span class="note">← Heartbeat, anomaly detection</span>
+<span class="d">│   └── </span><span class="file">health_monitor.h</span>
+<span class="d">├── </span><span class="dir">recovery/</span>
+<span class="d">│   ├── </span><span class="key">recovery_manager.cpp</span>          <span class="note">← Task restart, soft reboot</span>
+<span class="d">│   └── </span><span class="file">recovery_manager.h</span>
+<span class="d">├── </span><span class="dir">tasks/</span>
+<span class="d">│   ├── </span><span class="file">sensor_task.cpp / .h</span>
+<span class="d">│   ├── </span><span class="file">comm_task.cpp / .h</span>
+<span class="d">│   └── </span><span class="file">logging_task.cpp / .h</span>
+<span class="d">├── </span><span class="dir">ui/</span>
+<span class="d">│   └── </span><span class="file">oled_ui_task.cpp / .h</span>         <span class="note">← SSD1306 dashboard</span>
+<span class="d">├── </span><span class="dir">drivers/</span>
+<span class="d">│   └── </span><span class="file">hardware_init.cpp / .h</span>
+<span class="d">├── </span><span class="dir">testing/</span>
+<span class="d">│   └── </span><span class="file">fault_inject.cpp</span>
+<span class="d">├── </span><span class="file">platformio.ini</span>
+<span class="d">└── </span><span class="file">README.md</span>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── FUTURE ──────────────────────────────────────────────────── -->
+<section>
+  <div class="reveal">
+    <div class="section-label">// 07 — roadmap</div>
+    <div class="section-title">Future <span>Improvements</span></div>
+  </div>
+  <div class="future-grid">
+    <div class="future-card reveal">
+      <div class="future-phase">Phase 6</div>
+      <div class="future-title">TinyML Anomaly Detection</div>
+      <div class="future-desc">Train Edge Impulse model on normal sensor/timing data. Run TFLite Micro on ESP32 for intelligent anomaly scoring.</div>
+    </div>
+    <div class="future-card reveal">
+      <div class="future-phase">Phase 7</div>
+      <div class="future-title">OTA Self-Update</div>
+      <div class="future-desc">Pull firmware patches over WiFi when healthy. Apply only after integrity check passes.</div>
+    </div>
+    <div class="future-card reveal">
+      <div class="future-phase">Phase 8</div>
+      <div class="future-title">Multi-Node Mesh</div>
+      <div class="future-desc">ESP-NOW mesh between multiple GhostBoards. Distributed health consensus across nodes.</div>
+    </div>
+    <div class="future-card reveal">
+      <div class="future-phase">Phase 9</div>
+      <div class="future-title">Web Dashboard</div>
+      <div class="future-desc">Serve real-time system telemetry via ESP32 WiFi AP using WebSocket + HTML5.</div>
+    </div>
+    <div class="future-card reveal">
+      <div class="future-phase">Phase 10</div>
+      <div class="future-title">Persistent Fault History</div>
+      <div class="future-desc">Store recovery events in NVS flash. Analyze MTBF and failure patterns across reboots.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────── -->
+<footer>
+  <span>GHOSTBOARD</span> &nbsp;—&nbsp; AI-Assisted Self-Healing Embedded System &nbsp;—&nbsp; MIT License<br>
+  <span style="color:var(--text-dim);font-size:0.65rem;margin-top:0.5rem;display:block;">Built to survive.</span>
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver(
+    entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
+    { threshold: 0.1 }
+  );
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
