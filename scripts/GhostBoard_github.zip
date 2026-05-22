@@ -1,0 +1,1 @@
+cd /home/claude && zip -r GhostBoard_github.zip GhostBoard/ --exclude "*.DS_Store" && echo "Done" && ls -lh GhostBoard_github.zip
