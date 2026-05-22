@@ -1,0 +1,1 @@
+cp /home/claude/GhostBoard_github.zip /mnt/user-data/outputs/GhostBoard_op_github.zip && echo "Copied"
