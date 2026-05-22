@@ -27,8 +27,8 @@
 // ─── USER CONFIGURATION ──────────────────────────────────────────────────────
 // !! Fill these in before flashing !!
 
-#define WIFI_SSID        "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD    "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID        "Prisha's A36"  //wifi-ssid
+#define WIFI_PASSWORD    "qwertyuiop10"   //YOUR_WIFI_PASSWORD
 #define SUPABASE_URL     "https://ruhbfitbhkybcpuknfhs.supabase.co"
 #define SUPABASE_ANON_KEY "ap-southeast-1"
 
