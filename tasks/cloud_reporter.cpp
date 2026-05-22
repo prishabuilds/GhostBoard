@@ -27,10 +27,10 @@
 // ─── USER CONFIGURATION ──────────────────────────────────────────────────────
 // !! Fill these in before flashing !!
 
-#define WIFI_SSID        "Prisha's A36"  //wifi-ssid
-#define WIFI_PASSWORD    "qwertyuiop10"   //YOUR_WIFI_PASSWORD
-#define SUPABASE_URL     "https://ruhbfitbhkybcpuknfhs.supabase.co"
-#define SUPABASE_ANON_KEY "ap-southeast-1"
+#define WIFI_SSID        "Your WIFI-SSID"  
+#define WIFI_PASSWORD    "YOUR_WIFI_PASSWORD"   
+#define SUPABASE_URL     "https://YOUR_PROJECT_ID.supabase.co"
+#define SUPABASE_ANON_KEY "aeyJhbGci..."
 
 // ─── Endpoints ────────────────────────────────────────────────────────────────
 #define EP_SENSOR   SUPABASE_URL "/rest/v1/sensor_data"
