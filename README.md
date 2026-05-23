@@ -1,5 +1,7 @@
-👻 GhostBoard — AI-Assisted Self-Healing Embedded System
+# 👻 GhostBoard — AI-Assisted Self-Healing Embedded System
 > *A fault-tolerant FreeRTOS firmware that detects, isolates, and recovers from hardware/software failures autonomously — without rebooting the device.*
+🌐 **Live Dashboard:** https://prishabuilds.github.io/GhostBoard/dashboard.html
+📄 **Project Site:** https://prishabuilds.github.io/GhostBoard/
 ![Platform](https://img.shields.io/badge/Platform-ESP32-blue?style=flat-square)
 ![Framework](https://img.shields.io/badge/Framework-FreeRTOS-green?style=flat-square)
 ![Language](https://img.shields.io/badge/Language-C%2FC%2B%2B-orange?style=flat-square)
@@ -198,7 +200,7 @@ ESP32 board connected via USB
 Steps
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/GhostBoard.git
+git clone https://github.com/prishabuilds/GhostBoard.git
 cd GhostBoard
 
 # 2. Build firmware
